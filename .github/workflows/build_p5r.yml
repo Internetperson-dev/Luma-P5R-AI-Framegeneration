@@ -1,0 +1,76 @@
+name: Build Persona 5 Royal addon
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: p5r-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - Development-Release
+          - Test-Release
+          - Publishing-Release
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build ReShade (x64)
+        shell: pwsh
+        run: msbuild "Source\External\reshade\ReShade.sln" /m /p:Configuration=Release /p:Platform=64-bit
+
+      - name: Build P5R addon
+        shell: pwsh
+        run: msbuild Luma.sln /m /p:Configuration=${{ matrix.config }} /p:Platform=x64 /p:DefineConstants="REMOTE_BUILD=1"
+
+      - name: Package P5R addon
+        shell: pwsh
+        run: pwsh -ExecutionPolicy Bypass -File "Scripts/package.ps1" -Project "Persona 5 Royal" -Config "${{ matrix.config }}" -Platform x64 -AddonPath "Binaries\x64-${{ matrix.config }}\Luma-Persona 5 Royal.addon" -OutDir "."
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: P5R-${{ matrix.config }}
+          path: Luma-*.zip
+          if-no-files-found: error
+          compression-level: 0
+
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: write
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: P5R-*
+          merge-multiple: true
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: p5r-${{ github.run_number }}
+          name: P5R Frame Generation (Build ${{ github.run_number }})
+          body: |
+            Persona 5 Royal addon with the OptiScaler frame-generation bridge.
+
+            See `OPTISCALER_FG.md` for OptiScaler configuration.
+          files: Luma-*.zip

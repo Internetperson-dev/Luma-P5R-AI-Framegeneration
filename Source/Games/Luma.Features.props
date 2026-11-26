@@ -1,0 +1,435 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <UseLumaDXP Condition="'$(UseLumaDXP)'==''">false</UseLumaDXP>
+    <UseLumaNGX Condition="'$(UseLumaNGX)'==''">false</UseLumaNGX>
+    <UseLumaFSR Condition="'$(UseLumaFSR)'==''">false</UseLumaFSR>
+    <!-- FSR 4 through DX11->DX12 interop (needs UseLumaFSR, x64 only). The FidelityFX API DX12 dlls are shipped next to the addon. -->
+    <UseLumaFSR4 Condition="'$(UseLumaFSR4)'==''">false</UseLumaFSR4>
+    <!-- XeSS (x64 only), natively on DX11 on Intel GPUs, and through DX11->DX12 interop on the others. Intel's signed libxess_dx11.dll and libxess.dll are shipped next to the addon. -->
+    <UseLumaXeSS Condition="'$(UseLumaXeSS)'==''">false</UseLumaXeSS>
+    <!-- DX11->DX12 interop (see "D3D12Interop.h"), enabled automatically by the features that need it -->
+    <UseLumaD3D12Interop Condition="'$(UseLumaD3D12Interop)'=='' and '$(UseLumaFSR)'=='true' and '$(UseLumaFSR4)'=='true'">true</UseLumaD3D12Interop>
+    <UseLumaD3D12Interop Condition="'$(UseLumaD3D12Interop)'=='' and '$(UseLumaXeSS)'=='true'">true</UseLumaD3D12Interop>
+    <UseLumaD3D12Interop Condition="'$(UseLumaD3D12Interop)'==''">false</UseLumaD3D12Interop>
+    <!-- Shared hooking library (SafetyHook and Zydis submodules), enabled automatically by the features that need it -->
+    <UseLumaSafetyHook Condition="'$(UseLumaSafetyHook)'=='' and '$(UseLumaFSR)'=='true' and '$(UseLumaFSR4)'=='true'">true</UseLumaSafetyHook>
+    <UseLumaSafetyHook Condition="'$(UseLumaSafetyHook)'==''">false</UseLumaSafetyHook>
+    <UseLumaFastNoise Condition="'$(UseLumaFastNoise)'==''">false</UseLumaFastNoise>
+    <!-- 32-bit games: DLSS, FSR and XeSS through the x64 "SR Bridge Helper" (Source/Core/sr_bridge). package.ps1 ships it and the upscalers' dlls next to the addon. -->
+    <UseLumaSRBridge Condition="'$(UseLumaSRBridge)'==''">false</UseLumaSRBridge>
+    <!-- On by default: NVAPI is a static lib that loads the driver's DLL at runtime, so it's harmless on non NVIDIA GPUs (init just fails). -->
+    <UseLumaNVAPI Condition="'$(UseLumaNVAPI)'==''">true</UseLumaNVAPI>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(UseLumaDXP)'=='true'">
+    <VcpkgEnabled>true</VcpkgEnabled>
+    <VcpkgEnableManifest>true</VcpkgEnableManifest>
+    <VcpkgManifestRoot>$(MSBuildProjectDirectory)</VcpkgManifestRoot>
+  </PropertyGroup>
+
+  <Target Name="LumaEnsureDxpManifest" BeforeTargets="VcpkgInstallManifestDependencies"
+          Condition="'$(UseLumaDXP)'=='true'">
+    <PropertyGroup>
+      <_LumaManifestName>$(ProjectName.Replace(' ', '-').ToLower())-luma</_LumaManifestName>
+      <_LumaPropsRoot>$(MSBuildThisFileDirectory)..\..</_LumaPropsRoot>
+    </PropertyGroup>
+    <Exec Command="powershell -ExecutionPolicy Bypass -File &quot;$(_LumaPropsRoot)\scripts\ensure_dxp_vcpkg.ps1&quot; -ProjectDir &quot;$(MSBuildProjectDirectory)&quot; -ManifestName &quot;$(_LumaManifestName)&quot;" />
+  </Target>
+
+  <PropertyGroup Condition="'$(UseLumaNGX)'=='true'">
+    <LumaNGXRoot>$(MSBuildThisFileDirectory)..\External\NGX</LumaNGXRoot>
+    <LumaNGXLibName Condition="'$(Configuration)'=='Development-Debug'">nvsdk_ngx_d_dbg.lib</LumaNGXLibName>
+    <LumaNGXLibName Condition="'$(Configuration)'!='Development-Debug'">nvsdk_ngx_d.lib</LumaNGXLibName>
+    <LumaNGXRuntimePath Condition="'$(Configuration)'=='Development-Debug' or '$(Configuration)'=='Development-Release'">$(LumaNGXRoot)\bin\dev\nvngx_dlss.dll</LumaNGXRuntimePath>
+    <LumaNGXRuntimePath Condition="'$(Configuration)'!='Development-Debug' and '$(Configuration)'!='Development-Release'">$(LumaNGXRoot)\bin\rel\nvngx_dlss.dll</LumaNGXRuntimePath>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(UseLumaFSR)'=='true'">
+    <LumaFSRRoot>$(MSBuildThisFileDirectory)..\External\FidelityFX</LumaFSRRoot>
+    <LumaFSRLibSuffix Condition="'$(Configuration)'=='Development-Debug'">d</LumaFSRLibSuffix>
+    <LumaFSRLibSuffix Condition="'$(Configuration)'!='Development-Debug'"></LumaFSRLibSuffix>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(UseLumaNVAPI)'=='true'">
+    <LumaNVAPIRoot>$(MSBuildThisFileDirectory)..\External\NVAPI</LumaNVAPIRoot>
+    <LumaNVAPILibDir Condition="'$(Platform)'=='Win32'">$(LumaNVAPIRoot)\x86</LumaNVAPILibDir>
+    <LumaNVAPILibDir Condition="'$(Platform)'!='Win32'">$(LumaNVAPIRoot)\amd64</LumaNVAPILibDir>
+    <LumaNVAPILibName Condition="'$(Platform)'=='Win32'">nvapi.lib</LumaNVAPILibName>
+    <LumaNVAPILibName Condition="'$(Platform)'!='Win32'">nvapi64.lib</LumaNVAPILibName>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(UseLumaSafetyHook)'=='true'">
+    <LumaSafetyHookRoot>$(MSBuildThisFileDirectory)..\External\safetyhook</LumaSafetyHookRoot>
+    <LumaZydisRoot>$(MSBuildThisFileDirectory)..\External\zydis</LumaZydisRoot>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(UseLumaSafetyHook)'=='true'">
+    <ClCompile Include="$(LumaSafetyHookRoot)\src\allocator.cpp">
+      <ObjectFileName>$(IntDir)safetyhook\</ObjectFileName>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaSafetyHookRoot)\src\easy.cpp">
+      <ObjectFileName>$(IntDir)safetyhook\</ObjectFileName>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaSafetyHookRoot)\src\inline_hook.cpp">
+      <ObjectFileName>$(IntDir)safetyhook\</ObjectFileName>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaSafetyHookRoot)\src\mid_hook.cpp">
+      <ObjectFileName>$(IntDir)safetyhook\</ObjectFileName>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaSafetyHookRoot)\src\os.windows.cpp">
+      <ObjectFileName>$(IntDir)safetyhook\</ObjectFileName>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaSafetyHookRoot)\src\utility.cpp">
+      <ObjectFileName>$(IntDir)safetyhook\</ObjectFileName>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaSafetyHookRoot)\src\vmt_hook.cpp">
+      <ObjectFileName>$(IntDir)safetyhook\</ObjectFileName>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <!-- Zydis and Zycore have files with the same name (e.g. "String.c"), so they need separate object folders -->
+    <ClCompile Include="$(LumaZydisRoot)\src\Decoder.c">
+      <ObjectFileName>$(IntDir)zydis\</ObjectFileName>
+      <AdditionalIncludeDirectories>$(LumaZydisRoot)\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <CompileAs>CompileAsC</CompileAs>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaZydisRoot)\src\DecoderData.c">
+      <ObjectFileName>$(IntDir)zydis\</ObjectFileName>
+      <AdditionalIncludeDirectories>$(LumaZydisRoot)\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <CompileAs>CompileAsC</CompileAs>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaZydisRoot)\src\Disassembler.c">
+      <ObjectFileName>$(IntDir)zydis\</ObjectFileName>
+      <AdditionalIncludeDirectories>$(LumaZydisRoot)\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <CompileAs>CompileAsC</CompileAs>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaZydisRoot)\src\Encoder.c">
+      <ObjectFileName>$(IntDir)zydis\</ObjectFileName>
+      <AdditionalIncludeDirectories>$(LumaZydisRoot)\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <CompileAs>CompileAsC</CompileAs>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaZydisRoot)\src\EncoderData.c">
+      <ObjectFileName>$(IntDir)zydis\</ObjectFileName>
+      <AdditionalIncludeDirectories>$(LumaZydisRoot)\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <CompileAs>CompileAsC</CompileAs>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaZydisRoot)\src\Formatter.c">
+      <ObjectFileName>$(IntDir)zydis\</ObjectFileName>
+      <AdditionalIncludeDirectories>$(LumaZydisRoot)\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <CompileAs>CompileAsC</CompileAs>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaZydisRoot)\src\FormatterATT.c">
+      <ObjectFileName>$(IntDir)zydis\</ObjectFileName>
+      <AdditionalIncludeDirectories>$(LumaZydisRoot)\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <CompileAs>CompileAsC</CompileAs>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaZydisRoot)\src\FormatterBase.c">
+      <ObjectFileName>$(IntDir)zydis\</ObjectFileName>
+      <AdditionalIncludeDirectories>$(LumaZydisRoot)\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <CompileAs>CompileAsC</CompileAs>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaZydisRoot)\src\FormatterBuffer.c">
+      <ObjectFileName>$(IntDir)zydis\</ObjectFileName>
+      <AdditionalIncludeDirectories>$(LumaZydisRoot)\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <CompileAs>CompileAsC</CompileAs>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaZydisRoot)\src\FormatterIntel.c">
+      <ObjectFileName>$(IntDir)zydis\</ObjectFileName>
+      <AdditionalIncludeDirectories>$(LumaZydisRoot)\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <CompileAs>CompileAsC</CompileAs>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaZydisRoot)\src\MetaInfo.c">
+      <ObjectFileName>$(IntDir)zydis\</ObjectFileName>
+      <AdditionalIncludeDirectories>$(LumaZydisRoot)\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <CompileAs>CompileAsC</CompileAs>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaZydisRoot)\src\Mnemonic.c">
+      <ObjectFileName>$(IntDir)zydis\</ObjectFileName>
+      <AdditionalIncludeDirectories>$(LumaZydisRoot)\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <CompileAs>CompileAsC</CompileAs>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaZydisRoot)\src\Register.c">
+      <ObjectFileName>$(IntDir)zydis\</ObjectFileName>
+      <AdditionalIncludeDirectories>$(LumaZydisRoot)\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <CompileAs>CompileAsC</CompileAs>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaZydisRoot)\src\Segment.c">
+      <ObjectFileName>$(IntDir)zydis\</ObjectFileName>
+      <AdditionalIncludeDirectories>$(LumaZydisRoot)\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <CompileAs>CompileAsC</CompileAs>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaZydisRoot)\src\SharedData.c">
+      <ObjectFileName>$(IntDir)zydis\</ObjectFileName>
+      <AdditionalIncludeDirectories>$(LumaZydisRoot)\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <CompileAs>CompileAsC</CompileAs>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaZydisRoot)\src\String.c">
+      <ObjectFileName>$(IntDir)zydis\</ObjectFileName>
+      <AdditionalIncludeDirectories>$(LumaZydisRoot)\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <CompileAs>CompileAsC</CompileAs>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaZydisRoot)\src\Utils.c">
+      <ObjectFileName>$(IntDir)zydis\</ObjectFileName>
+      <AdditionalIncludeDirectories>$(LumaZydisRoot)\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <CompileAs>CompileAsC</CompileAs>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaZydisRoot)\src\Zydis.c">
+      <ObjectFileName>$(IntDir)zydis\</ObjectFileName>
+      <AdditionalIncludeDirectories>$(LumaZydisRoot)\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <CompileAs>CompileAsC</CompileAs>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaZydisRoot)\dependencies\zycore\src\Allocator.c">
+      <ObjectFileName>$(IntDir)zycore\</ObjectFileName>
+      <CompileAs>CompileAsC</CompileAs>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaZydisRoot)\dependencies\zycore\src\ArgParse.c">
+      <ObjectFileName>$(IntDir)zycore\</ObjectFileName>
+      <CompileAs>CompileAsC</CompileAs>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaZydisRoot)\dependencies\zycore\src\Bitset.c">
+      <ObjectFileName>$(IntDir)zycore\</ObjectFileName>
+      <CompileAs>CompileAsC</CompileAs>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaZydisRoot)\dependencies\zycore\src\Format.c">
+      <ObjectFileName>$(IntDir)zycore\</ObjectFileName>
+      <CompileAs>CompileAsC</CompileAs>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaZydisRoot)\dependencies\zycore\src\List.c">
+      <ObjectFileName>$(IntDir)zycore\</ObjectFileName>
+      <CompileAs>CompileAsC</CompileAs>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaZydisRoot)\dependencies\zycore\src\String.c">
+      <ObjectFileName>$(IntDir)zycore\</ObjectFileName>
+      <CompileAs>CompileAsC</CompileAs>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaZydisRoot)\dependencies\zycore\src\Vector.c">
+      <ObjectFileName>$(IntDir)zycore\</ObjectFileName>
+      <CompileAs>CompileAsC</CompileAs>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaZydisRoot)\dependencies\zycore\src\Zycore.c">
+      <ObjectFileName>$(IntDir)zycore\</ObjectFileName>
+      <CompileAs>CompileAsC</CompileAs>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaZydisRoot)\dependencies\zycore\src\API\Memory.c">
+      <ObjectFileName>$(IntDir)zycore\</ObjectFileName>
+      <CompileAs>CompileAsC</CompileAs>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaZydisRoot)\dependencies\zycore\src\API\Process.c">
+      <ObjectFileName>$(IntDir)zycore\</ObjectFileName>
+      <CompileAs>CompileAsC</CompileAs>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaZydisRoot)\dependencies\zycore\src\API\Synchronization.c">
+      <ObjectFileName>$(IntDir)zycore\</ObjectFileName>
+      <CompileAs>CompileAsC</CompileAs>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaZydisRoot)\dependencies\zycore\src\API\Terminal.c">
+      <ObjectFileName>$(IntDir)zycore\</ObjectFileName>
+      <CompileAs>CompileAsC</CompileAs>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="$(LumaZydisRoot)\dependencies\zycore\src\API\Thread.c">
+      <ObjectFileName>$(IntDir)zycore\</ObjectFileName>
+      <CompileAs>CompileAsC</CompileAs>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+  </ItemGroup>
+
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <!-- The unity build can exceed the default object file section limit (C1128), especially in Debug. -->
+      <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <ClCompile Condition="'$(UseLumaDXP)'=='true'">
+      <!-- PreprocessorDefinitions metadata overrides the CharacterSet-derived
+           UNICODE defines, so restore them explicitly. -->
+      <PreprocessorDefinitions>UNICODE;_UNICODE;_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH;LUMA_USE_DXP=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <ClCompile Condition="'$(UseLumaNGX)'=='true'">
+      <!-- PreprocessorDefinitions metadata overrides the CharacterSet-derived
+           UNICODE defines, so restore them explicitly (same as above). -->
+      <AdditionalIncludeDirectories>$(LumaNGXRoot);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>UNICODE;_UNICODE;ENABLE_NGX=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <ClCompile Condition="'$(UseLumaFSR)'=='true'">
+      <AdditionalIncludeDirectories>$(LumaFSRRoot);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>UNICODE;_UNICODE;ENABLE_FIDELITY_SK=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <ClCompile Condition="'$(UseLumaFSR)'=='true' and '$(UseLumaFSR4)'=='true'">
+      <PreprocessorDefinitions>UNICODE;_UNICODE;ENABLE_FSR4=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <ClCompile Condition="'$(UseLumaXeSS)'=='true'">
+      <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory)..\External\XeSS\inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>UNICODE;_UNICODE;ENABLE_XESS=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <ClCompile Condition="'$(UseLumaD3D12Interop)'=='true'">
+      <PreprocessorDefinitions>UNICODE;_UNICODE;ENABLE_D3D12_INTEROP=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <ClCompile Condition="'$(UseLumaSafetyHook)'=='true'">
+      <AdditionalIncludeDirectories>$(LumaSafetyHookRoot)\include;$(LumaZydisRoot)\include;$(LumaZydisRoot)\dependencies\zycore\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>UNICODE;_UNICODE;ZYDIS_STATIC_BUILD;ZYCORE_STATIC_BUILD;ENABLE_SAFETYHOOK=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <ClCompile Condition="'$(UseLumaSRBridge)'=='true'">
+      <PreprocessorDefinitions>UNICODE;_UNICODE;ENABLE_SR_BRIDGE=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <ClCompile Condition="'$(UseLumaFastNoise)'=='true'">
+      <PreprocessorDefinitions>UNICODE;_UNICODE;ENABLE_FAST_NOISE_TEXTURES=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <ClCompile Condition="'$(UseLumaNVAPI)'=='true'">
+      <AdditionalIncludeDirectories>$(LumaNVAPIRoot);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>UNICODE;_UNICODE;ENABLE_NVAPI=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link Condition="'$(UseLumaDXP)'=='true'">
+      <AdditionalDependencies>dxpatcher.lib;Ole32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+    <Link Condition="'$(UseLumaNGX)'=='true'">
+      <AdditionalLibraryDirectories>$(LumaNGXRoot)\libs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>$(LumaNGXLibName);%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+    <Link Condition="'$(UseLumaFSR)'=='true'">
+      <AdditionalLibraryDirectories>$(LumaFSRRoot)\libs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>ffx_backend_dx11_x64$(LumaFSRLibSuffix).lib;ffx_fsr3_x64$(LumaFSRLibSuffix).lib;ffx_frameinterpolation_x64$(LumaFSRLibSuffix).lib;ffx_fsr3upscaler_x64$(LumaFSRLibSuffix).lib;ffx_opticalflow_x64$(LumaFSRLibSuffix).lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+    <Link Condition="'$(UseLumaNVAPI)'=='true'">
+      <AdditionalLibraryDirectories>$(LumaNVAPILibDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>$(LumaNVAPILibName);%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+
+  <Target Name="LumaCopyNgxRuntime" AfterTargets="Build" Condition="'$(UseLumaNGX)'=='true' and Exists('$(LumaNGXRuntimePath)') and Exists('$(TargetDir)')">
+    <Copy SourceFiles="$(LumaNGXRuntimePath)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="LumaCopyFfxRuntime" AfterTargets="Build" Condition="'$(UseLumaFSR)'=='true' and '$(UseLumaFSR4)'=='true' and '$(Platform)'!='Win32' and Exists('$(TargetDir)')">
+    <ItemGroup>
+      <_LumaFfxRuntimeFiles Include="$(MSBuildThisFileDirectory)..\External\FidelityFX\bin\*.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_LumaFfxRuntimeFiles)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="LumaCopyXeSSRuntime" AfterTargets="Build" Condition="'$(UseLumaXeSS)'=='true' and '$(Platform)'!='Win32' and Exists('$(TargetDir)')">
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)..\External\XeSS\bin\libxess.dll;$(MSBuildThisFileDirectory)..\External\XeSS\bin\libxess_dx11.dll" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="LumaCopyDxpRuntime" AfterTargets="Build" Condition="false" />
+
+  <!-- Package this game like the CI does (scripts/package.ps1) into the repo's
+       out_package folder. Run with: msbuild <Game>.vcxproj /t:LumaPackage
+       (or set -p:LumaPackage=true to run it after every build). -->
+  <Target Name="LumaPackage" AfterTargets="Build" Condition="'$(LumaPackage)'=='true'">
+    <PropertyGroup>
+      <_LumaRepoRoot>$(MSBuildThisFileDirectory)..\..</_LumaRepoRoot>
+    </PropertyGroup>
+    <Exec Command="powershell -ExecutionPolicy Bypass -File &quot;$(_LumaRepoRoot)\scripts\package.ps1&quot; -Project &quot;$(ProjectName)&quot; -Config &quot;$(Configuration)&quot; -Platform &quot;$(Platform)&quot; -AddonPath &quot;$(TargetPath)&quot; -OutDir &quot;$(_LumaRepoRoot)\Binaries\$(Platform)-$(Configuration)&quot;" />
+  </Target>
+</Project>

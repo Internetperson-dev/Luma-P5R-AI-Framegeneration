@@ -1,0 +1,30 @@
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Persona 5 Royal", "Source\Games\Persona 5 Royal\Persona 5 Royal.vcxproj", "{D947ACC3-CDAC-4227-8809-AABF39B1C75B}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Development-Debug|x64 = Development-Debug|x64
+		Development-Release|x64 = Development-Release|x64
+		Publishing-Release|x64 = Publishing-Release|x64
+		Test-Release|x64 = Test-Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{D947ACC3-CDAC-4227-8809-AABF39B1C75B}.Development-Debug|x64.ActiveCfg = Development-Debug|x64
+		{D947ACC3-CDAC-4227-8809-AABF39B1C75B}.Development-Debug|x64.Build.0 = Development-Debug|x64
+		{D947ACC3-CDAC-4227-8809-AABF39B1C75B}.Development-Release|x64.ActiveCfg = Development-Release|x64
+		{D947ACC3-CDAC-4227-8809-AABF39B1C75B}.Development-Release|x64.Build.0 = Development-Release|x64
+		{D947ACC3-CDAC-4227-8809-AABF39B1C75B}.Publishing-Release|x64.ActiveCfg = Publishing-Release|x64
+		{D947ACC3-CDAC-4227-8809-AABF39B1C75B}.Publishing-Release|x64.Build.0 = Publishing-Release|x64
+		{D947ACC3-CDAC-4227-8809-AABF39B1C75B}.Test-Release|x64.ActiveCfg = Test-Release|x64
+		{D947ACC3-CDAC-4227-8809-AABF39B1C75B}.Test-Release|x64.Build.0 = Test-Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {8B799422-BA66-3174-B21F-B9FA07C4B2E3}
+	EndGlobalSection
+EndGlobal

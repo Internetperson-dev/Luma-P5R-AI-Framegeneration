@@ -1,0 +1,201 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="core.hpp" />
+    <ClCompile Include="dlss\DLSS.cpp">
+      <Filter>DLSS</Filter>
+    </ClCompile>
+    <ClCompile Include="utils\system.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="fsr\FSR.cpp">
+      <Filter>FSR</Filter>
+    </ClCompile>
+    <ClCompile Include="fsr\FSR4.cpp">
+      <Filter>FSR</Filter>
+    </ClCompile>
+    <ClCompile Include="xess\XeSS.cpp">
+      <Filter>XeSS</Filter>
+    </ClCompile>
+    <ClCompile Include="hooks\DXGIHooks.cpp">
+      <Filter>Hooks</Filter>
+    </ClCompile>
+    <ClCompile Include="hooks\FidelityFXHooks.cpp">
+      <Filter>Hooks</Filter>
+    </ClCompile>
+    <ClCompile Include="hooks\SystemHooks.cpp">
+      <Filter>Hooks</Filter>
+    </ClCompile>
+    <ClCompile Include="interop\D3D12Interop.cpp">
+      <Filter>Interop</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="DLSS">
+      <UniqueIdentifier>{7ec0fec7-1c94-4182-87e0-653e1c01082e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Includes">
+      <UniqueIdentifier>{b448b214-cbb5-4ee4-a88f-4dae17079dfc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Includes\UI">
+      <UniqueIdentifier>{c8300da5-fb1e-4fcc-a77d-65e173f54475}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Utils">
+      <UniqueIdentifier>{b8e435d6-17be-4021-a8aa-c11c6ceb044c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FSR">
+      <UniqueIdentifier>{7373d656-7d70-4fc5-8b73-efa2b6af7433}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Hooks">
+      <UniqueIdentifier>{3f6d2a1e-8c4b-4f7a-9e2d-5b1c0a7e6d41}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Interop">
+      <UniqueIdentifier>{a2c94e17-6b3d-4d58-8f1a-0e7b9c3d2f65}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="XeSS">
+      <UniqueIdentifier>{5d8e1b3a-2f47-4c69-9a0e-7c3b6d1f8e24}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="dlss\DLSS.h">
+      <Filter>DLSS</Filter>
+    </ClInclude>
+    <ClInclude Include="utils\pipeline.hpp">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="utils\shader_compiler.hpp">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="utils\display.hpp">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="utils\format.hpp">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\cbuffers.h">
+      <Filter>Includes</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\math.h">
+      <Filter>Includes</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\matrix.h">
+      <Filter>Includes</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\shader_define.h">
+      <Filter>Includes</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\globals.h">
+      <Filter>Includes</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\recursive_shared_mutex.h">
+      <Filter>Includes</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\shaders.h">
+      <Filter>Includes</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\instance_data.h">
+      <Filter>Includes</Filter>
+    </ClInclude>
+    <ClInclude Include="utils\resource.hpp">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="utils\draw.hpp">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="texture_data\SMAA_AreaTex.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="texture_data\SMAA_SearchTex.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\debug.h">
+      <Filter>Includes</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\game.h">
+      <Filter>Includes</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\shader_types.h">
+      <Filter>Includes</Filter>
+    </ClInclude>
+    <ClInclude Include="utils\system.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\hash.h">
+      <Filter>Includes</Filter>
+    </ClInclude>
+    <ClInclude Include="fsr\FSR.h">
+      <Filter>FSR</Filter>
+    </ClInclude>
+    <ClInclude Include="fsr\FSR4.h">
+      <Filter>FSR</Filter>
+    </ClInclude>
+    <ClInclude Include="xess\XeSS.h">
+      <Filter>XeSS</Filter>
+    </ClInclude>
+    <ClInclude Include="hooks\DXGIHooks.h">
+      <Filter>Hooks</Filter>
+    </ClInclude>
+    <ClInclude Include="hooks\FidelityFXHooks.h">
+      <Filter>Hooks</Filter>
+    </ClInclude>
+    <ClInclude Include="hooks\Hooks.h">
+      <Filter>Hooks</Filter>
+    </ClInclude>
+    <ClInclude Include="hooks\SystemHooks.h">
+      <Filter>Hooks</Filter>
+    </ClInclude>
+    <ClInclude Include="interop\D3D12Interop.h">
+      <Filter>Interop</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\super_resolution.h">
+      <Filter>Includes</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\shader_patching.h">
+      <Filter>Includes</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\com_ptr.h">
+      <Filter>Includes</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\containers.h">
+      <Filter>Includes</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\overlay_log.h">
+      <Filter>Includes</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\callbacks.h">
+      <Filter>Includes</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\managed_resources.h">
+      <Filter>Includes</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\patch.hpp">
+      <Filter>Includes</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\mcp.hpp">
+      <Filter>Includes</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\trace.hpp">
+      <Filter>Includes</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\ui\ui.hpp">
+      <Filter>Includes\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\resource_upgrades.hpp">
+      <Filter>Includes</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="includes\resource_upgrades.inl">
+      <Filter>Includes</Filter>
+    </None>
+    <None Include="includes\mcp_server.inl">
+      <Filter>Includes</Filter>
+    </None>
+    <None Include="includes\trace.inl">
+      <Filter>Includes</Filter>
+    </None>
+    <None Include="includes\ui\trace_ui.inl">
+      <Filter>Includes\UI</Filter>
+    </None>
+  </ItemGroup>
+</Project>
