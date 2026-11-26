@@ -34,18 +34,33 @@ GitHub Actions builds and packages P5R on Windows for `Development-Release`, `Te
 
 See [`Source/Games/Persona 5 Royal/OPTISCALER_FG.md`](Source/Games/Persona%205%20Royal/OPTISCALER_FG.md).
 
-The required `OptiScaler.ini` settings are:
+Luma's **Settings** tab now exposes OptiScaler frame generation, the OptiScaler SR model, and
+low-latency mode (Off / Auto / Reflex / Anti-Lag 2 / XeLL). These choices are saved in
+`ReShade.ini` and written to `OptiScaler.ini` automatically; restart the game to apply them.
+
+Keep Luma's Super Resolution mode set to **DLSS** (use DLAA quality for FG without upscaling),
+because that is the NGX call OptiScaler intercepts. The equivalent manual `OptiScaler.ini`
+settings are:
 
 ```ini
 [Plugins]
 LoadReShade=true
 
+[Inputs]
+EnableDlssInputs=true
+
 [Upscalers]
 Dx11Upscaler=dlss
 
 [FrameGen]
+Enabled=true
 FGInput=Upscaler
 FGOutput=FSRFG
-```
+DisableHudless=false
 
-Then select DLSS in Luma's Super Resolution menu.
+[fakenvapi]
+UseFakenvapi=true
+LowLatencyInput=1
+LowLatencyOutput=1
+ForceReflex=0
+```

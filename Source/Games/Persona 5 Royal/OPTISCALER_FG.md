@@ -11,28 +11,53 @@ lists instead of asserting.
 
 ## OptiScaler setup
 
-Install Luma first, then OptiScaler as `dxgi.dll` with ReShade loaded from OptiScaler. In
-`OptiScaler.ini`:
+Install Luma first, then OptiScaler as `dxgi.dll` with ReShade loaded from OptiScaler. Open Luma's
+**Settings** tab and use the new **OptiScaler integration** section:
+
+| Luma option | What it controls |
+|---|---|
+| Frame generation | `Off`, FSR FG, DLSS FG or XeSS FG (`[FrameGen] Enabled` / `FGOutput`) |
+| OptiScaler upscaler | The SR model OptiScaler substitutes for Luma's NGX call (`[Upscalers] Dx11Upscaler`) |
+| Low latency | `Off`, `Auto`, NVIDIA Reflex, AMD Anti-Lag 2 or Intel XeLL (`[fakenvapi]`) |
+
+Luma writes these choices to `OptiScaler.ini` automatically and stores them in `ReShade.ini`.
+They are applied on the next game launch. Luma always uses `FGInput=Upscaler`, so the HUDless
+scene colour supplied through `Opti.Hudless` is used instead of OptiScaler's automatic HUDFix.
+
+Keep Luma's **Super Resolution** mode set to **DLSS**, because that is the NGX call OptiScaler
+intercepts. Use DLAA quality for frame generation without upscaling, or turn frame generation off
+for upscaling only. The **OptiScaler upscaler** option can still replace the visual SR model with
+FSR or XeSS while Luma performs the SR dispatch.
+
+The equivalent manual configuration is:
 
 ```ini
 [Plugins]
 LoadReShade=true
 
+[Inputs]
+EnableDlssInputs=true
+
 [Upscalers]
 Dx11Upscaler=dlss
 
 [FrameGen]
+Enabled=true
 FGInput=Upscaler
 FGOutput=FSRFG
-```
+DisableHudless=false
 
-Then select DLSS in Luma's Super Resolution menu as usual. `FGInput=Upscaler` is OptiScaler's
-"OptiFG (Upscaler)" mode. The game-provided HUDless resource replaces the need for OptiScaler's
-automatic HUDFix for this frame.
+[fakenvapi]
+UseFakenvapi=true
+LowLatencyInput=1
+LowLatencyOutput=1
+ForceReflex=0
+```
 
 Notes:
 
-- `FGOutput=XeFG` can also be tried if FSR FG has driver-specific issues; it is the heavier but
-  generally better HUD option in OptiScaler.
+- `Auto` latency selects Reflex on NVIDIA, Anti-Lag 2 on AMD RDNA and XeLL on Intel. Anti-Lag 2
+  requires an RDNA GPU; XeLL needs Intel's low-latency runtime. NVIDIA "Boost" behaviour is
+  driver-side and follows an enabled Reflex mode.
 - P5R's known 120 FPS cap still applies unless an external frame-rate unlocker is used.
-- Without OptiScaler, the new parameter writes are ignored by NGX and behaviour is unchanged.
+- Without OptiScaler, the NGX parameter writes are ignored and behaviour is unchanged.

@@ -11,6 +11,375 @@
 #define XXH_IMPLEMENTATION
 #include "xxhash.h"
 
+#include <algorithm>
+#include <cctype>
+#include <cstdlib>
+#include <cwctype>
+#include <iterator>
+#include <string>
+#include <tlhelp32.h>
+
+// Thin control layer for OptiScaler. Luma keeps producing the SR inputs (including the HUDless
+// scene colour), while OptiScaler owns frame generation and low-latency implementation.
+namespace OptiScalerBridge
+{
+   enum class FrameGeneration : int
+   {
+      Off,
+      FSRFG,
+      DLSSG,
+      XeFG
+   };
+
+   enum class UpscalerModel : int
+   {
+      DLSS,
+      FSR,
+      XeSS
+   };
+
+   enum class LatencyMode : int
+   {
+      Off,
+      Auto,
+      Reflex,
+      AntiLag2,
+      XeLL
+   };
+
+   static FrameGeneration s_frame_generation = FrameGeneration::FSRFG;
+   static UpscalerModel s_upscaler_model = UpscalerModel::DLSS;
+   static LatencyMode s_latency_mode = LatencyMode::Auto;
+   static HMODULE s_addon_module = nullptr;
+   static std::wstring s_ini_path;
+
+   static std::wstring DirectoryOf(const std::wstring& path)
+   {
+      const size_t separator = path.find_last_of(L"\\/");
+      return separator == std::wstring::npos ? std::wstring() : path.substr(0, separator);
+   }
+
+   static std::wstring ParentOf(const std::wstring& path)
+   {
+      return DirectoryOf(DirectoryOf(path));
+   }
+
+   static std::wstring JoinPath(const std::wstring& directory, const wchar_t* file_name)
+   {
+      if (directory.empty())
+      {
+         return file_name;
+      }
+      if (directory.back() == L'\\' || directory.back() == L'/')
+      {
+         return directory + file_name;
+      }
+      return directory + L"\\" + file_name;
+   }
+
+   static bool FileExists(const std::wstring& path)
+   {
+      if (path.empty())
+      {
+         return false;
+      }
+      const DWORD attributes = GetFileAttributesW(path.c_str());
+      return attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0;
+   }
+
+   static bool IsOptiScalerProxy(const std::wstring& module_name)
+   {
+      std::wstring lower_name = module_name;
+      std::transform(lower_name.begin(), lower_name.end(), lower_name.begin(), [](wchar_t c) { return std::towlower(c); });
+
+      static const wchar_t* proxy_names[] = {
+         L"nvngx_dlss.dll", L"dxgi.dll", L"d3d11.dll", L"d3d12.dll",
+         L"winmm.dll", L"dinput8.dll", L"optiscaler.dll", L"libxess.dll"
+      };
+
+      for (const wchar_t* proxy_name : proxy_names)
+      {
+         if (lower_name == proxy_name)
+         {
+            return true;
+         }
+      }
+      return false;
+   }
+
+   static std::wstring FindIni()
+   {
+      // OptiScaler puts OptiScaler.ini next to whichever DLL is acting as its proxy.
+      HANDLE modules = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, 0);
+      if (modules != INVALID_HANDLE_VALUE)
+      {
+         MODULEENTRY32W entry {};
+         entry.dwSize = sizeof(entry);
+
+         for (BOOL ok = Module32FirstW(modules, &entry); ok; ok = Module32NextW(modules, &entry))
+         {
+            std::wstring module_name = entry.szModule;
+            if (!IsOptiScalerProxy(module_name))
+            {
+               continue;
+            }
+
+            const std::wstring ini_path = JoinPath(DirectoryOf(entry.szExePath), L"OptiScaler.ini");
+            if (FileExists(ini_path))
+            {
+               CloseHandle(modules);
+               return ini_path;
+            }
+         }
+         CloseHandle(modules);
+      }
+
+      wchar_t executable_path[MAX_PATH] = {};
+      GetModuleFileNameW(nullptr, executable_path, MAX_PATH);
+
+      wchar_t addon_path[MAX_PATH] = {};
+      if (s_addon_module != nullptr)
+      {
+         GetModuleFileNameW(s_addon_module, addon_path, MAX_PATH);
+      }
+
+      const std::wstring executable_dir = DirectoryOf(executable_path);
+      const std::wstring addon_dir = DirectoryOf(addon_path);
+      const std::wstring search_dirs[] = {
+         executable_dir,
+         addon_dir,
+         ParentOf(addon_dir),
+         ParentOf(ParentOf(addon_dir)),
+         std::wstring()
+      };
+
+      // Prefer an existing file. The executable directory is the normal fallback for a fresh setup.
+      for (const std::wstring& search_dir : search_dirs)
+      {
+         const std::wstring ini_path = JoinPath(search_dir, L"OptiScaler.ini");
+         if (FileExists(ini_path) || search_dir == executable_dir)
+         {
+            return ini_path;
+         }
+      }
+      return L"OptiScaler.ini";
+   }
+
+   static const std::wstring& GetIniPath()
+   {
+      if (s_ini_path.empty())
+      {
+         s_ini_path = FindIni();
+      }
+      return s_ini_path;
+   }
+
+   static void WriteIni(const wchar_t* section, const wchar_t* key, const wchar_t* value)
+   {
+      WritePrivateProfileStringW(section, key, value, GetIniPath().c_str());
+   }
+
+   static std::wstring ReadIni(const wchar_t* section, const wchar_t* key)
+   {
+      wchar_t buffer[128] = {};
+      GetPrivateProfileStringW(section, key, L"", buffer, static_cast<DWORD>(std::size(buffer)), GetIniPath().c_str());
+      return buffer;
+   }
+
+   static FrameGeneration FrameGenerationFromString(const std::wstring& value)
+   {
+      if (value == L"DLSSG") return FrameGeneration::DLSSG;
+      if (value == L"XeFG") return FrameGeneration::XeFG;
+      if (value == L"FSRFG") return FrameGeneration::FSRFG;
+      return FrameGeneration::Off;
+   }
+
+   static UpscalerModel UpscalerModelFromString(const std::wstring& value)
+   {
+      if (value == L"xess" || value == L"xess_12") return UpscalerModel::XeSS;
+      if (value == L"ffx" || value == L"fsr31" || value == L"fsr22" || value == L"fsr21") return UpscalerModel::FSR;
+      return UpscalerModel::DLSS;
+   }
+
+   static LatencyMode LatencyModeFromValue(const std::wstring& value)
+   {
+      const unsigned long raw = wcstoul(value.c_str(), nullptr, 10);
+      switch (raw)
+      {
+      case 2: return LatencyMode::AntiLag2;
+      case 3: return LatencyMode::Reflex;
+      case 4: return LatencyMode::XeLL;
+      case 1: return LatencyMode::Auto;
+      case 0:
+      default: return LatencyMode::Off;
+      }
+   }
+
+   static void ApplySettings(bool save_to_luma_config = true)
+   {
+      const wchar_t* fg_output = L"NoFG";
+      switch (s_frame_generation)
+      {
+      case FrameGeneration::FSRFG: fg_output = L"FSRFG"; break;
+      case FrameGeneration::DLSSG: fg_output = L"DLSSG"; break;
+      case FrameGeneration::XeFG: fg_output = L"XeFG"; break;
+      case FrameGeneration::Off: break;
+      }
+
+      const wchar_t* upscaler = L"dlss";
+      switch (s_upscaler_model)
+      {
+      case UpscalerModel::FSR: upscaler = L"ffx"; break;
+      case UpscalerModel::XeSS: upscaler = L"xess"; break;
+      case UpscalerModel::DLSS: break;
+      }
+
+      const wchar_t* latency_input = L"0";
+      const wchar_t* latency_output = L"0";
+      const wchar_t* force_reflex = L"1";
+      switch (s_latency_mode)
+      {
+      case LatencyMode::Auto:
+         latency_input = L"1";
+         latency_output = L"1";
+         force_reflex = L"0";
+         break;
+      case LatencyMode::Reflex:
+         latency_input = L"3";
+         latency_output = L"6";
+         force_reflex = L"2";
+         break;
+      case LatencyMode::AntiLag2:
+         latency_input = L"2";
+         latency_output = L"3";
+         break;
+      case LatencyMode::XeLL:
+         latency_input = L"4";
+         latency_output = L"4";
+         break;
+      case LatencyMode::Off:
+         break;
+      }
+
+      WriteIni(L"Plugins", L"LoadReShade", L"true");
+      WriteIni(L"Inputs", L"EnableDlssInputs", L"true");
+      WriteIni(L"Upscalers", L"Dx11Upscaler", upscaler);
+
+      WriteIni(L"FrameGen", L"Enabled", s_frame_generation == FrameGeneration::Off ? L"false" : L"true");
+      WriteIni(L"FrameGen", L"FGInput", L"Upscaler");
+      WriteIni(L"FrameGen", L"FGOutput", fg_output);
+      WriteIni(L"FrameGen", L"DisableHudless", L"false");
+
+      WriteIni(L"fakenvapi", L"UseFakenvapi", s_latency_mode == LatencyMode::Off ? L"false" : L"true");
+      WriteIni(L"fakenvapi", L"ForceXeLL", L"false");
+      WriteIni(L"fakenvapi", L"ForceLatencyFlex", L"false");
+      WriteIni(L"fakenvapi", L"ForceReflex", force_reflex);
+      WriteIni(L"fakenvapi", L"LowLatencyInput", latency_input);
+      WriteIni(L"fakenvapi", L"LowLatencyOutput", latency_output);
+
+      if (!save_to_luma_config)
+      {
+         return;
+      }
+
+      reshade::api::effect_runtime* runtime = nullptr;
+      reshade::set_config_value(runtime, NAME, "OptiFrameGeneration", static_cast<int>(s_frame_generation));
+      reshade::set_config_value(runtime, NAME, "OptiUpscalerModel", static_cast<int>(s_upscaler_model));
+      reshade::set_config_value(runtime, NAME, "OptiLatencyMode", static_cast<int>(s_latency_mode));
+   }
+
+   static void LoadSettings()
+   {
+      reshade::api::effect_runtime* runtime = nullptr;
+
+      int frame_generation = -1;
+      int upscaler_model = -1;
+      int latency_mode = -1;
+
+      if (reshade::get_config_value(runtime, NAME, "OptiFrameGeneration", frame_generation) &&
+          frame_generation >= static_cast<int>(FrameGeneration::Off) &&
+          frame_generation <= static_cast<int>(FrameGeneration::XeFG))
+      {
+         s_frame_generation = static_cast<FrameGeneration>(frame_generation);
+      }
+      else
+      {
+         const bool fg_enabled = ReadIni(L"FrameGen", L"Enabled") == L"true";
+         s_frame_generation = fg_enabled ? FrameGenerationFromString(ReadIni(L"FrameGen", L"FGOutput")) : FrameGeneration::Off;
+      }
+
+      if (reshade::get_config_value(runtime, NAME, "OptiUpscalerModel", upscaler_model) &&
+          upscaler_model >= static_cast<int>(UpscalerModel::DLSS) &&
+          upscaler_model <= static_cast<int>(UpscalerModel::XeSS))
+      {
+         s_upscaler_model = static_cast<UpscalerModel>(upscaler_model);
+      }
+      else
+      {
+         s_upscaler_model = UpscalerModelFromString(ReadIni(L"Upscalers", L"Dx11Upscaler"));
+      }
+
+      if (reshade::get_config_value(runtime, NAME, "OptiLatencyMode", latency_mode) &&
+          latency_mode >= static_cast<int>(LatencyMode::Off) &&
+          latency_mode <= static_cast<int>(LatencyMode::XeLL))
+      {
+         s_latency_mode = static_cast<LatencyMode>(latency_mode);
+      }
+      else
+      {
+         s_latency_mode = LatencyModeFromValue(ReadIni(L"fakenvapi", L"LowLatencyOutput"));
+      }
+
+      // Keep OptiScaler.ini in sync with the settings Luma last showed in its menu.
+      ApplySettings(false);
+   }
+
+   static void DrawSettings()
+   {
+      ImGui::Separator();
+      ImGui::Text("OptiScaler integration");
+      ImGui::TextDisabled("Changes are saved to OptiScaler.ini and apply after restarting the game.");
+
+      int frame_generation = static_cast<int>(s_frame_generation);
+      static const char* frame_generation_items[] = { "Off", "FSR Frame Generation", "DLSS Frame Generation", "XeSS Frame Generation" };
+      if (ImGui::Combo("Frame generation", &frame_generation, frame_generation_items, static_cast<int>(std::size(frame_generation_items))))
+      {
+         s_frame_generation = static_cast<FrameGeneration>(frame_generation);
+         ApplySettings();
+      }
+      if (ImGui::IsItemHovered())
+      {
+         ImGui::SetTooltip("OptiScaler generates the extra frames from Luma's depth, motion vectors and HUDless scene colour.\nKeep Luma's Super Resolution set to DLSS; use DLAA for frame generation without upscaling.");
+      }
+
+      int upscaler_model = static_cast<int>(s_upscaler_model);
+      static const char* upscaler_items[] = { "DLSS", "FSR", "XeSS" };
+      if (ImGui::Combo("OptiScaler upscaler", &upscaler_model, upscaler_items, static_cast<int>(std::size(upscaler_items))))
+      {
+         s_upscaler_model = static_cast<UpscalerModel>(upscaler_model);
+         ApplySettings();
+      }
+      if (ImGui::IsItemHovered())
+      {
+         ImGui::SetTooltip("The SR model OptiScaler substitutes for Luma's NGX/DLSS call. Luma still performs the SR dispatch, so leave Luma's SR mode on DLSS.");
+      }
+
+      int latency_mode = static_cast<int>(s_latency_mode);
+      static const char* latency_items[] = { "Off", "Auto", "NVIDIA Reflex", "AMD Anti-Lag 2", "Intel XeLL" };
+      if (ImGui::Combo("Low latency", &latency_mode, latency_items, static_cast<int>(std::size(latency_items))))
+      {
+         s_latency_mode = static_cast<LatencyMode>(latency_mode);
+         ApplySettings();
+      }
+      if (ImGui::IsItemHovered())
+      {
+         ImGui::SetTooltip("OptiScaler's fakenvapi integration handles this. Auto picks Reflex on NVIDIA, Anti-Lag 2 on AMD RDNA and XeLL on Intel.\nNVIDIA Reflex Boost is controlled by the driver once Reflex is enabled.");
+      }
+
+      ImGui::TextDisabled("Config: %ls", GetIniPath().c_str());
+   }
+} // namespace OptiScalerBridge
+
 enum class FramePhase
 {
    SHADOW_MAP,
@@ -252,6 +621,8 @@ public:
          // older versions were saving the setting under the wrong key
          reshade::get_config_value(runtime, NAME, "shadow_map_size_override", g_shadow_map_size_override);
       }
+
+      OptiScalerBridge::LoadSettings();
    }
 
    void OnInitSwapchain(reshade::api::swapchain* swapchain) override
@@ -1328,6 +1699,8 @@ public:
    {
       reshade::api::effect_runtime* runtime = nullptr;
 
+      OptiScalerBridge::DrawSettings();
+
       ImGui::NewLine();
 
       const char* previewString;
@@ -1430,6 +1803,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
       Globals::SetGlobals(PROJECT_NAME, "Persona 5 Royal Luma mod");
       Globals::DEVELOPMENT_STATE = Globals::ModDevelopmentState::Finished;
       Globals::VERSION = 1;
+
+      OptiScalerBridge::s_addon_module = hModule;
 
       // need to patch the code that adds the resolution dependent mip bias to sampler states
       // otherwise mip chain based effects break when the render resolution is 3840x2160
