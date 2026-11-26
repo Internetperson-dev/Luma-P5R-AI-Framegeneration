@@ -30,6 +30,13 @@ pwsh -ExecutionPolicy Bypass -File Scripts/package.ps1 -Project "Persona 5 Royal
 
 GitHub Actions builds and packages P5R on Windows for `Development-Release`, `Test-Release`, and `Publishing-Release`.
 
+## Frame rate unlocker (recommended)
+
+Frame generation is most useful when P5R is not limited by its default 120 FPS cap, so using a
+frame rate unlocker is recommended. This fork is intended to be used with
+[p5rpc.fpsUnlocker](https://github.com/Internetperson-dev/p5rpc.fpsUnlocker). Without an unlocker,
+the game's default cap still limits the base frame rate before frame generation is applied.
+
 ## OptiScaler setup
 
 See [`Source/Games/Persona 5 Royal/OPTISCALER_FG.md`](Source/Games/Persona%205%20Royal/OPTISCALER_FG.md).
