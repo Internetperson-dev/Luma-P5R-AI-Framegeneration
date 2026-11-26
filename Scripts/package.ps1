@@ -212,6 +212,14 @@ try {
         if (Test-Path $p5rOptiIni) {
             Copy-Item $p5rOptiIni -Destination (Join-Path $tempDir "OptiScaler.ini") -Force
         }
+
+        # OptiScaler is GPL-3.0, so ship its license alongside the other third-party notices.
+        $optiLicense = Join-Path $repoRoot "Source\External\OptiScaler\LICENSE"
+        if (Test-Path $optiLicense) {
+            $licenseDir = Join-Path $tempDir "Licenses"
+            New-Item -ItemType Directory -Path $licenseDir -Force | Out-Null
+            Copy-Item $optiLicense -Destination (Join-Path $licenseDir "OptiScaler_LICENSE.txt") -Force
+        }
     }
 
     # Addon at the zip root, under the canonical Luma-<Project>.addon name
