@@ -16,7 +16,8 @@ Install Luma first, then OptiScaler as `dxgi.dll` with ReShade loaded from OptiS
 
 | Luma option | What it controls |
 |---|---|
-| Frame generation | `Off`, FSR FG, DLSS FG or XeSS FG (`[FrameGen] Enabled` / `FGOutput`) |
+| Mode | `Off`, `Upscaling only`, `Frame generation only`, `Upscaling + frame generation` |
+| FG backend | FSR FG, DLSS FG or XeSS FG (`[FrameGen] FGOutput`) |
 | OptiScaler upscaler | The SR model OptiScaler substitutes for Luma's NGX call (`[Upscalers] Dx11Upscaler`) |
 | Low latency | `Off`, `Auto`, NVIDIA Reflex, AMD Anti-Lag 2 or Intel XeLL (`[fakenvapi]`) |
 
@@ -24,10 +25,17 @@ Luma writes these choices to `OptiScaler.ini` automatically and stores them in `
 They are applied on the next game launch. Luma always uses `FGInput=Upscaler`, so the HUDless
 scene colour supplied through `Opti.Hudless` is used instead of OptiScaler's automatic HUDFix.
 
-Keep Luma's **Super Resolution** mode set to **DLSS**, because that is the NGX call OptiScaler
-intercepts. Use DLAA quality for frame generation without upscaling, or turn frame generation off
-for upscaling only. The **OptiScaler upscaler** option can still replace the visual SR model with
-FSR or XeSS while Luma performs the SR dispatch.
+The **Mode** control is the only place you need to change behaviour. Luma automatically selects
+the DLSS SR dispatch that OptiScaler intercepts:
+
+- `Off` disables both Luma SR and OptiScaler FG.
+- `Upscaling only` enables SR and disables FG.
+- `Frame generation only` enables both the SR dispatch and FG; with P5R rendering at output
+  resolution this becomes DLAA + FG.
+- `Upscaling + frame generation` enables both with normal P5R render scaling.
+
+The **OptiScaler upscaler** option still replaces the visual SR model with FSR or XeSS while Luma
+performs the NGX dispatch.
 
 The equivalent manual configuration is:
 

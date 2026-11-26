@@ -23,6 +23,14 @@
 // scene colour), while OptiScaler owns frame generation and low-latency implementation.
 namespace OptiScalerBridge
 {
+   enum class Mode : int
+   {
+      Off,
+      UpscalingOnly,
+      FrameGenerationOnly,
+      UpscalingAndFrameGeneration
+   };
+
    enum class FrameGeneration : int
    {
       Off,
@@ -47,6 +55,7 @@ namespace OptiScalerBridge
       XeLL
    };
 
+   static Mode s_mode = Mode::UpscalingAndFrameGeneration;
    static FrameGeneration s_frame_generation = FrameGeneration::FSRFG;
    static UpscalerModel s_upscaler_model = UpscalerModel::DLSS;
    static LatencyMode s_latency_mode = LatencyMode::Auto;
@@ -217,8 +226,17 @@ namespace OptiScalerBridge
 
    static void ApplySettings(bool save_to_luma_config = true)
    {
+      const bool fg_enabled = s_mode == Mode::FrameGenerationOnly || s_mode == Mode::UpscalingAndFrameGeneration;
+
+      // "Off" is only ever a legacy config value: the Mode combo now owns the on/off decision.
+      FrameGeneration effective_fg = s_frame_generation == FrameGeneration::Off ? FrameGeneration::FSRFG : s_frame_generation;
+      if (!fg_enabled)
+      {
+         effective_fg = FrameGeneration::Off;
+      }
+
       const wchar_t* fg_output = L"NoFG";
-      switch (s_frame_generation)
+      switch (effective_fg)
       {
       case FrameGeneration::FSRFG: fg_output = L"FSRFG"; break;
       case FrameGeneration::DLSSG: fg_output = L"DLSSG"; break;
@@ -265,7 +283,7 @@ namespace OptiScalerBridge
       WriteIni(L"Inputs", L"EnableDlssInputs", L"true");
       WriteIni(L"Upscalers", L"Dx11Upscaler", upscaler);
 
-      WriteIni(L"FrameGen", L"Enabled", s_frame_generation == FrameGeneration::Off ? L"false" : L"true");
+      WriteIni(L"FrameGen", L"Enabled", effective_fg == FrameGeneration::Off ? L"false" : L"true");
       WriteIni(L"FrameGen", L"FGInput", L"Upscaler");
       WriteIni(L"FrameGen", L"FGOutput", fg_output);
       WriteIni(L"FrameGen", L"DisableHudless", L"false");
@@ -277,12 +295,20 @@ namespace OptiScalerBridge
       WriteIni(L"fakenvapi", L"LowLatencyInput", latency_input);
       WriteIni(L"fakenvapi", L"LowLatencyOutput", latency_output);
 
+      // Luma's own SR panel is no longer the user-facing control. This bridge selects the NGX
+      // dispatch OptiScaler needs; the visual SR model itself is chosen by "Dx11Upscaler" above.
+#if ENABLE_SR
+      sr_user_type = s_mode == Mode::Off ? SR::UserType::None : SR::UserType::DLSS;
+      reshade::set_config_value(nullptr, NAME, "SRUserType", static_cast<int>(sr_user_type));
+#endif
+
       if (!save_to_luma_config)
       {
          return;
       }
 
       reshade::api::effect_runtime* runtime = nullptr;
+      reshade::set_config_value(runtime, NAME, "OptiMode", static_cast<int>(s_mode));
       reshade::set_config_value(runtime, NAME, "OptiFrameGeneration", static_cast<int>(s_frame_generation));
       reshade::set_config_value(runtime, NAME, "OptiUpscalerModel", static_cast<int>(s_upscaler_model));
       reshade::set_config_value(runtime, NAME, "OptiLatencyMode", static_cast<int>(s_latency_mode));
@@ -292,9 +318,30 @@ namespace OptiScalerBridge
    {
       reshade::api::effect_runtime* runtime = nullptr;
 
+      int mode = -1;
       int frame_generation = -1;
       int upscaler_model = -1;
       int latency_mode = -1;
+
+      if (reshade::get_config_value(runtime, NAME, "OptiMode", mode) &&
+          mode >= static_cast<int>(Mode::Off) &&
+          mode <= static_cast<int>(Mode::UpscalingAndFrameGeneration))
+      {
+         s_mode = static_cast<Mode>(mode);
+      }
+      else
+      {
+         // Migrate from the previous FG-only toggle. Keep SR active on DLSS as before.
+         if (reshade::get_config_value(runtime, NAME, "OptiFrameGeneration", frame_generation) &&
+             frame_generation == static_cast<int>(FrameGeneration::Off))
+         {
+            s_mode = Mode::UpscalingOnly;
+         }
+         else
+         {
+            s_mode = Mode::UpscalingAndFrameGeneration;
+         }
+      }
 
       if (reshade::get_config_value(runtime, NAME, "OptiFrameGeneration", frame_generation) &&
           frame_generation >= static_cast<int>(FrameGeneration::Off) &&
@@ -340,16 +387,28 @@ namespace OptiScalerBridge
       ImGui::Text("OptiScaler integration");
       ImGui::TextDisabled("Changes are saved to OptiScaler.ini and apply after restarting the game.");
 
-      int frame_generation = static_cast<int>(s_frame_generation);
-      static const char* frame_generation_items[] = { "Off", "FSR Frame Generation", "DLSS Frame Generation", "XeSS Frame Generation" };
-      if (ImGui::Combo("Frame generation", &frame_generation, frame_generation_items, static_cast<int>(std::size(frame_generation_items))))
+      int mode = static_cast<int>(s_mode);
+      static const char* mode_items[] = { "Off", "Upscaling only", "Frame generation only", "Upscaling + frame generation" };
+      if (ImGui::Combo("Mode", &mode, mode_items, static_cast<int>(std::size(mode_items))))
       {
-         s_frame_generation = static_cast<FrameGeneration>(frame_generation);
+         s_mode = static_cast<Mode>(mode);
          ApplySettings();
       }
       if (ImGui::IsItemHovered())
       {
-         ImGui::SetTooltip("OptiScaler generates the extra frames from Luma's depth, motion vectors and HUDless scene colour.\nKeep Luma's Super Resolution set to DLSS; use DLAA for frame generation without upscaling.");
+         ImGui::SetTooltip("This is the only mode control you need. Luma automatically selects the DLSS SR dispatch OptiScaler intercepts.\nFrame generation only uses DLAA when P5R is rendering at output resolution.");
+      }
+
+      int frame_generation = static_cast<int>(s_frame_generation == FrameGeneration::Off ? FrameGeneration::FSRFG : s_frame_generation) - 1;
+      static const char* frame_generation_items[] = { "FSR Frame Generation", "DLSS Frame Generation", "XeSS Frame Generation" };
+      if (ImGui::Combo("FG backend", &frame_generation, frame_generation_items, static_cast<int>(std::size(frame_generation_items))))
+      {
+         s_frame_generation = static_cast<FrameGeneration>(frame_generation + 1);
+         ApplySettings();
+      }
+      if (ImGui::IsItemHovered())
+      {
+         ImGui::SetTooltip("OptiScaler generates the extra frames from Luma's depth, motion vectors and HUDless scene colour.");
       }
 
       int upscaler_model = static_cast<int>(s_upscaler_model);
@@ -361,7 +420,7 @@ namespace OptiScalerBridge
       }
       if (ImGui::IsItemHovered())
       {
-         ImGui::SetTooltip("The SR model OptiScaler substitutes for Luma's NGX/DLSS call. Luma still performs the SR dispatch, so leave Luma's SR mode on DLSS.");
+         ImGui::SetTooltip("The SR model OptiScaler substitutes for Luma's NGX/DLSS dispatch. Luma's SR mode is set automatically by the Mode control above.");
       }
 
       int latency_mode = static_cast<int>(s_latency_mode);
