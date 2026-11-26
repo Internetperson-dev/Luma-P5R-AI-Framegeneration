@@ -8,8 +8,9 @@
     root plus a "Luma/" folder (the shaders mount, filtered to this project),
     with the project-level (Core/Textures) folders only included when the
     project opts in via UseLumaFastNoise, plus the runtime DLLs the project
-    needs (dxcompiler.dll for DXP, d3dcompiler_47.dll, ReShade as dxgi.dll,
-    NGX DLSS and the FidelityFX DX12 dlls for FSR 4 when opted in).
+    needs (d3dcompiler_47.dll, ReShade as dxgi.dll, NGX DLSS and the FidelityFX
+    DX12 dlls for FSR 4 when opted in). With -OptiScalerDir, OptiScaler is
+    packaged as dxgi.dll and ReShade is packaged as ReShade64.dll.
 
 .EXAMPLE
     .\scripts\package.ps1 -Project "Final Fantasy XV" -Config "Development-Release" -Platform "x64"
@@ -22,7 +23,8 @@ param(
     [ValidateSet("x64", "Win32")]
     [string]$Platform = "x64",
     [string]$OutDir = "",
-    [string]$AddonPath = ""
+    [string]$AddonPath = "",
+    [string]$OptiScalerDir = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -147,7 +149,9 @@ try {
     if (Test-Path $d3dCompilerSrc) { Copy-Item $d3dCompilerSrc -Destination "$tempDir\Luma" -Force }
     $reshadeSrc = if ($Platform -eq "Win32") { Join-Path $repoRoot "Source\External\reshade\bin\Win32\Release\ReShade32.dll" }
                   else { Join-Path $repoRoot "Source\External\reshade\bin\x64\Release\ReShade64.dll" }
-    if (Test-Path $reshadeSrc) { Copy-Item $reshadeSrc -Destination (Join-Path $tempDir "dxgi.dll") -Force }
+    # When OptiScaler ships in the package it owns the dxgi.dll proxy and loads ReShade itself.
+    $reshadeFileName = if ([string]::IsNullOrEmpty($OptiScalerDir)) { "dxgi.dll" } else { "ReShade64.dll" }
+    if (Test-Path $reshadeSrc) { Copy-Item $reshadeSrc -Destination (Join-Path $tempDir $reshadeFileName) -Force }
     # The SR bridge's x64 helper (a Luma.sln project, built next to the Win32 addons), which loads the dlls below
     if ($useLumaSRBridge) {
         $helperSrc = Join-Path $repoRoot "Binaries\Win32-$Config\Luma-Upscaler.exe"
@@ -176,6 +180,38 @@ try {
         New-Item -ItemType Directory -Path "$tempDir\Licenses" -Force | Out-Null
         Copy-Item (Join-Path $xessDir "LICENSE.txt") -Destination "$tempDir\Licenses\XeSS_LICENSE.txt" -Force
         Copy-Item (Join-Path $xessDir "third-party-programs.txt") -Destination "$tempDir\Licenses\XeSS_third-party-programs.txt" -Force
+    }
+
+    # OptiScaler is the dxgi.dll proxy when included in the package. ReShade is loaded by
+    # OptiScaler from ReShade64.dll. Copy the full post-build layout because FG backends load
+    # additional DLLs from the OptiScaler\ folder.
+    if (-not [string]::IsNullOrEmpty($OptiScalerDir)) {
+        if (-not (Test-Path $OptiScalerDir -PathType Container)) {
+            Write-Error "OptiScaler package directory not found: $OptiScalerDir (build OptiScaler.sln first)"
+            exit 1
+        }
+
+        Write-Host "Staging OptiScaler: $OptiScalerDir"
+        $optiRoot = [IO.Path]::GetFullPath($OptiScalerDir).TrimEnd([char]92, [char]47)
+        $optiDll = Get-ChildItem -LiteralPath $optiRoot -Filter "OptiScaler.dll" -File -Recurse | Select-Object -First 1
+        if (-not $optiDll) {
+            Write-Error "OptiScaler.dll not found under: $optiRoot"
+            exit 1
+        }
+
+        foreach ($file in Get-ChildItem -LiteralPath $optiRoot -File -Recurse -Force) {
+            $relative = $file.FullName.Substring($optiRoot.Length).TrimStart([char]92, [char]47)
+            $destination = if ($relative -ieq "OptiScaler.dll") { Join-Path $tempDir "dxgi.dll" } else { Join-Path $tempDir $relative }
+            $destinationDir = Split-Path $destination -Parent
+            New-Item -ItemType Directory -Path $destinationDir -Force | Out-Null
+            Copy-Item -LiteralPath $file.FullName -Destination $destination -Force
+        }
+
+        # P5R-specific defaults override OptiScaler's stock ini so the package works first launch.
+        $p5rOptiIni = Join-Path $projectDir "OptiScaler.ini"
+        if (Test-Path $p5rOptiIni) {
+            Copy-Item $p5rOptiIni -Destination (Join-Path $tempDir "OptiScaler.ini") -Force
+        }
     }
 
     # Addon at the zip root, under the canonical Luma-<Project>.addon name

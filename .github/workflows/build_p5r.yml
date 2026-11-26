@@ -31,6 +31,10 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
+      - name: Build OptiScaler (x64)
+        shell: pwsh
+        run: msbuild "Source\External\OptiScaler\OptiScaler.sln" /m /p:Configuration=Release /p:Platform=x64 /verbosity:minimal
+
       - name: Build ReShade (x64)
         shell: pwsh
         run: msbuild "Source\External\reshade\ReShade.sln" /m /p:Configuration=Release /p:Platform=64-bit
@@ -41,7 +45,7 @@ jobs:
 
       - name: Package P5R addon
         shell: pwsh
-        run: pwsh -ExecutionPolicy Bypass -File "Scripts/package.ps1" -Project "Persona 5 Royal" -Config "${{ matrix.config }}" -Platform x64 -AddonPath "Binaries\x64-${{ matrix.config }}\Luma-Persona 5 Royal.addon" -OutDir "."
+        run: pwsh -ExecutionPolicy Bypass -File "Scripts/package.ps1" -Project "Persona 5 Royal" -Config "${{ matrix.config }}" -Platform x64 -AddonPath "Binaries\x64-${{ matrix.config }}\Luma-Persona 5 Royal.addon" -OptiScalerDir "Source\External\OptiScaler\x64\Release\a" -OutDir "."
 
       - name: Upload package
         uses: actions/upload-artifact@v4
@@ -70,7 +74,8 @@ jobs:
           tag_name: p5r-${{ github.run_number }}
           name: P5R Frame Generation (Build ${{ github.run_number }})
           body: |
-            Persona 5 Royal addon with the OptiScaler frame-generation bridge.
+            Persona 5 Royal frame-generation build: Luma addon, OptiScaler as dxgi.dll,
+            ReShade64.dll, shaders and runtime DLLs in one package.
 
-            See `OPTISCALER_FG.md` for OptiScaler configuration.
+            Luma's Settings tab controls FG, upscaling and low latency. See `OPTISCALER_FG.md`.
           files: Luma-*.zip

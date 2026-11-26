@@ -299,6 +299,10 @@ namespace OptiScalerBridge
       WriteIni(L"Inputs", L"EnableDlssInputs", L"true");
       WriteIni(L"Upscalers", L"Dx11Upscaler", upscaler);
 
+      // Keep the Luma DX11/DX12 handoff deterministic in the package that ships both projects.
+      WriteIni(L"Hotfix", L"CreateD3D12DeviceForLuma", L"true");
+      WriteIni(L"Dx11withDx12", L"DontUseNTShared", L"true");
+
       WriteIni(L"FrameGen", L"Enabled", effective_fg == FrameGeneration::Off ? L"false" : L"true");
       WriteIni(L"FrameGen", L"FGInput", L"Upscaler");
       WriteIni(L"FrameGen", L"FGOutput", fg_output);

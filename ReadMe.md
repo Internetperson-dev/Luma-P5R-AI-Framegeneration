@@ -1,10 +1,16 @@
 # Luma — Persona 5 Royal frame generation
 
-Standalone, P5R-only fork of Luma. It contains the shared Core and the P5R addon project, with all other game projects removed, so builds only produce:
+Standalone, P5R-only build containing **Luma + OptiScaler**. It includes Luma's shared Core and
+P5R addon project, with all other game projects removed, plus vendored OptiScaler source under
+`Source/External/OptiScaler`. GitHub Actions builds both and packages them into a single ZIP.
 
-`Luma-Persona 5 Royal.addon`
+Luma is the GUI/control surface. OptiScaler is the backend that performs frame generation, SR
+model replacement and Reflex/Anti-Lag 2/XeLL latency handling. The addon supplies P5R's existing
+SR resources (scene colour, depth, decoded motion vectors) through NGX parameters, including the
+HUDless `merged_texture`; HUD/UI shader paths are untouched.
 
-The addon exposes P5R's existing Luma SR resources (scene colour, depth, decoded motion vectors) to OptiScaler's frame-generation path through NGX parameters. The HUD/UI shader paths are untouched.
+OptiScaler is GPL-3.0. Its upstream source, license and provenance are included in
+`Source/External/OptiScaler`.
 
 ## Build on Windows
 
@@ -19,16 +25,17 @@ Open `Luma.sln`, select an `x64` configuration, and build. The project uses the 
 Equivalent command line:
 
 ```bat
+msbuild Source\External\OptiScaler\OptiScaler.sln /m /p:Configuration=Release /p:Platform=x64
 msbuild Luma.sln /m /p:Configuration=Development-Release /p:Platform=x64
 ```
 
-Packaging (after a build):
+Packaging (after both builds):
 
 ```bat
-pwsh -ExecutionPolicy Bypass -File Scripts/package.ps1 -Project "Persona 5 Royal" -Config "Development-Release" -Platform x64
+pwsh -ExecutionPolicy Bypass -File Scripts/package.ps1 -Project "Persona 5 Royal" -Config "Development-Release" -Platform x64 -OptiScalerDir "Source\External\OptiScaler\x64\Release\a"
 ```
 
-GitHub Actions builds and packages P5R on Windows for `Development-Release`, `Test-Release`, and `Publishing-Release`.
+The ZIP then contains OptiScaler as `dxgi.dll`, ReShade as `ReShade64.dll`, the Luma addon, shaders and runtime DLLs. GitHub Actions builds and packages all of this on Windows for `Development-Release`, `Test-Release`, and `Publishing-Release`.
 
 ## Frame rate unlocker (recommended)
 
@@ -40,6 +47,9 @@ the game's default cap still limits the base frame rate before frame generation 
 ## OptiScaler setup
 
 See [`Source/Games/Persona 5 Royal/OPTISCALER_FG.md`](Source/Games/Persona%205%20Royal/OPTISCALER_FG.md).
+
+Extract the release ZIP into the P5R game folder. Do **not** install a separate OptiScaler build:
+the package already contains OptiScaler as `dxgi.dll` and ReShade as `ReShade64.dll`.
 
 Luma's **Settings** tab is now the only control surface. Its **OptiScaler integration** section
 exposes:
@@ -64,6 +74,12 @@ EnableDlssInputs=true
 
 [Upscalers]
 Dx11Upscaler=dlss
+
+[Hotfix]
+CreateD3D12DeviceForLuma=true
+
+[Dx11withDx12]
+DontUseNTShared=true
 
 [FrameGen]
 Enabled=true

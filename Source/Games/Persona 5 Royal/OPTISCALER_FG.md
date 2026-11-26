@@ -9,10 +9,14 @@ before UI drawing. OptiScaler copies it at Present, after post-processing has fi
 DX11 swapchain in a DX11-on-DX12 swapchain. The core then ignores foreign D3D12 devices/command
 lists instead of asserting.
 
+OptiScaler source is vendored under `Source/External/OptiScaler`. Windows CI builds it alongside
+Luma and puts both in the same release ZIP.
+
 ## OptiScaler setup
 
-Install Luma first, then OptiScaler as `dxgi.dll` with ReShade loaded from OptiScaler. Open Luma's
-**Settings** tab and use the new **OptiScaler integration** section:
+Extract a release ZIP into the P5R folder. The package already contains Luma, OptiScaler as
+`dxgi.dll`, and ReShade as `ReShade64.dll`; no separate OptiScaler install is needed. Open Luma's
+**Settings** tab and use the **OptiScaler integration** section:
 
 | Luma option | What it controls |
 |---|---|
@@ -50,6 +54,12 @@ EnableDlssInputs=true
 
 [Upscalers]
 Dx11Upscaler=dlss
+
+[Hotfix]
+CreateD3D12DeviceForLuma=true
+
+[Dx11withDx12]
+DontUseNTShared=true
 
 [FrameGen]
 Enabled=true
