@@ -22,8 +22,10 @@ Install Luma first, then OptiScaler as `dxgi.dll` with ReShade loaded from OptiS
 | Low latency | `Off`, `Auto`, NVIDIA Reflex, AMD Anti-Lag 2 or Intel XeLL (`[fakenvapi]`) |
 
 Luma writes these choices to `OptiScaler.ini` automatically and stores them in `ReShade.ini`.
-They are applied on the next game launch. Luma always uses `FGInput=Upscaler`, so the HUDless
-scene colour supplied through `Opti.Hudless` is used instead of OptiScaler's automatic HUDFix.
+Changing any of them prompts you to restart: **Yes** closes the game immediately, while **No**
+keeps the saved settings for the next launch. They are applied on the next game launch. Luma
+always uses `FGInput=Upscaler`, so the HUDless scene colour supplied through `Opti.Hudless` is used
+instead of OptiScaler's automatic HUDFix.
 
 The **Mode** control is the only place you need to change behaviour. Luma automatically selects
 the DLSS SR dispatch that OptiScaler intercepts:
@@ -67,5 +69,7 @@ Notes:
 - `Auto` latency selects Reflex on NVIDIA, Anti-Lag 2 on AMD RDNA and XeLL on Intel. Anti-Lag 2
   requires an RDNA GPU; XeLL needs Intel's low-latency runtime. NVIDIA "Boost" behaviour is
   driver-side and follows an enabled Reflex mode.
-- P5R's known 120 FPS cap still applies unless an external frame-rate unlocker is used.
+- P5R's default 120 FPS cap still limits the base frame rate without an external frame-rate
+  unlocker. With your uncapper installed, frame generation can add frames above that cap, provided
+  the FG backend is stable on your GPU/driver.
 - Without OptiScaler, the NGX parameter writes are ignored and behaviour is unchanged.

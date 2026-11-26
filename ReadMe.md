@@ -44,8 +44,9 @@ exposes:
 
 Luma automatically selects the DLSS SR dispatch that OptiScaler intercepts, so the separate Luma
 Super Resolution menu does not need to be touched. Choices are saved in `ReShade.ini` and written
-to `OptiScaler.ini` automatically; restart the game to apply them. The equivalent manual
-`OptiScaler.ini` settings are:
+to `OptiScaler.ini` automatically. Luma prompts to restart the game when any of these options
+change; choosing **Yes** closes the game immediately, while **No** keeps the saved settings for the
+next launch. The equivalent manual `OptiScaler.ini` settings are:
 
 ```ini
 [Plugins]

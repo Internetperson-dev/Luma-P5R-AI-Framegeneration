@@ -224,6 +224,22 @@ namespace OptiScalerBridge
       }
    }
 
+   static void PromptForRestart()
+   {
+      // Same restart-confirmation pattern used by the Luma core: Yes closes the game so the
+      // user can relaunch immediately, No leaves the saved settings for the next launch.
+      static const char* message =
+         "OptiScaler settings were saved.\n"
+         "Restart the game to apply them.\n\n"
+         "Restart now?";
+
+      const int result = MessageBoxA(NULL, message, NAME, MB_SETFOREGROUND | MB_YESNO);
+      if (result == IDYES)
+      {
+         std::exit(0);
+      }
+   }
+
    static void ApplySettings(bool save_to_luma_config = true)
    {
       const bool fg_enabled = s_mode == Mode::FrameGenerationOnly || s_mode == Mode::UpscalingAndFrameGeneration;
@@ -312,6 +328,8 @@ namespace OptiScalerBridge
       reshade::set_config_value(runtime, NAME, "OptiFrameGeneration", static_cast<int>(s_frame_generation));
       reshade::set_config_value(runtime, NAME, "OptiUpscalerModel", static_cast<int>(s_upscaler_model));
       reshade::set_config_value(runtime, NAME, "OptiLatencyMode", static_cast<int>(s_latency_mode));
+
+      PromptForRestart();
    }
 
    static void LoadSettings()
@@ -385,7 +403,7 @@ namespace OptiScalerBridge
    {
       ImGui::Separator();
       ImGui::Text("OptiScaler integration");
-      ImGui::TextDisabled("Changes are saved to OptiScaler.ini and apply after restarting the game.");
+      ImGui::TextDisabled("Changes are saved to OptiScaler.ini and require a game restart. Luma will prompt you to restart.");
 
       int mode = static_cast<int>(s_mode);
       static const char* mode_items[] = { "Off", "Upscaling only", "Frame generation only", "Upscaling + frame generation" };
