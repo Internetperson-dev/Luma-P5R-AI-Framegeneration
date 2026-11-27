@@ -1581,6 +1581,7 @@ public:
                native_device_context->Dispatch((game_device_data.render_resolution.x + 7) / 8, (game_device_data.render_resolution.y + 7) / 8, 1);
             }
 
+            bool upscale_succeeded = false;
             {
                SR::SuperResolutionImpl::DrawData draw_data;
                draw_data.source_color = game_device_data.source_color.get();
@@ -1598,9 +1599,20 @@ public:
                draw_data.vert_fov = game_device_data.fov;
                draw_data.reset = device_data.force_reset_sr;
 
-               bool dlss_succeeded = sr_implementations[device_data.sr_type]->Draw(sr_instance_data, native_device_context.get(), draw_data);
-               game_device_data.has_drawn_upscaling = dlss_succeeded;
-               device_data.has_drawn_sr = dlss_succeeded;
+               upscale_succeeded = sr_implementations[device_data.sr_type]->Draw(sr_instance_data, native_device_context.get(), draw_data);
+               game_device_data.has_drawn_upscaling = upscale_succeeded;
+               device_data.has_drawn_sr = upscale_succeeded;
+
+               if (!upscale_succeeded)
+               {
+                  static bool warned = false;
+                  if (!warned)
+                  {
+                     warned = true;
+                     reshade::log::message(reshade::log::level::warning,
+                        "[Luma] Super resolution did not produce an output this frame; showing the unscaled scene instead. Check ReShade.log for SR errors.");
+                  }
+               }
             }
             {
                ComPtr<ID3D11Device> device;
@@ -1629,9 +1641,14 @@ public:
                      color_srv.put());
                }
 
+               // If the upscaler failed, sample the original scene instead of the
+               // unwritten resolve texture. Otherwise a failed SR dispatch shows up
+               // as a frozen 3D image while the UI keeps animating.
+               ID3D11ShaderResourceView* const upscaled_color_srv = upscale_succeeded ? resolve_texture_srv.get() : color_srv.get();
+
                // some sr methods don't retain the alpha channel - combine sr result with the alpha from the original color texture
                {
-                  ID3D11ShaderResourceView* srvs[] = {resolve_texture_srv.get(), color_srv.get()};
+                  ID3D11ShaderResourceView* srvs[] = {upscaled_color_srv, color_srv.get()};
                   ID3D11SamplerState* samplers[] = {device_data.sampler_state_linear.get()};
                   native_device_context->CSSetShader(device_data.native_compute_shaders[CompileTimeStringHash("Merge")].get(), 0, 0);
                   native_device_context->CSSetShaderResources(0, 2, srvs);

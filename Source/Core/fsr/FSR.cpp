@@ -8,8 +8,10 @@
 
 #include "../includes/debug.h"
 
+#include <include/reshade.hpp>
 #include <cstring>
 #include <cassert>
+#include <string>
 #include <unordered_set>
 #include <wrl/client.h>
 #include <d3d11.h>
@@ -17,6 +19,16 @@
 namespace FidelityFX
 {
    constexpr int default_phase_count = 16;
+   constexpr uint32_t max_context_count = FFX_FSR3_CONTEXT_COUNT;
+
+   static void LogFsrOnce(reshade::log::level level, const char* key, const std::string& message)
+   {
+      static std::unordered_set<std::string> logged;
+      if (logged.emplace(key).second)
+      {
+         reshade::log::message(level, message.c_str());
+      }
+   }
 
    struct FSRInstanceData : public SR::InstanceData
    {
@@ -114,10 +126,13 @@ namespace FidelityFX
          FfxErrorCode err_code = ffxFsr3ContextDestroy(&custom_data->context);
          if (err_code != FFX_OK)
          {
-            printf_s("FSR3: ffxFsr3ContextDestroy failed, error = %d\n", static_cast<int>(err_code));
+            const std::string message = "[Luma] FSR3: ffxFsr3ContextDestroy failed (error " + std::to_string(static_cast<int>(err_code)) + ").";
+            LogFsrOnce(reshade::log::level::warning, "ffxFsr3ContextDestroy", message);
+            printf_s("%s\n", message.c_str());
          }
 
          free(custom_data->scratch_buffer);
+         custom_data->scratch_buffer = nullptr;
       }
 
       delete custom_data;
@@ -148,7 +163,11 @@ namespace FidelityFX
          return true;
       }
 
-      const size_t scratch_buffer_size = ffxGetScratchMemorySizeDX11(1);
+      // FSR3's context owns several internal FFX contexts (upscaler, optical flow,
+      // frame interpolation), so the DX11 backend scratch buffer must be sized for
+      // all of them. Sizing it for a single context can make context creation or
+      // dispatch fail in ways that look like a frozen image.
+      const size_t scratch_buffer_size = ffxGetScratchMemorySizeDX11(max_context_count);
       void* scratch_buffer = calloc(scratch_buffer_size, 1);
 
       Microsoft::WRL::ComPtr<ID3D11Device> device;
@@ -156,10 +175,12 @@ namespace FidelityFX
 
       FfxFsr3ContextDescription context_desc{};
 
-      FfxErrorCode err_code = ffxGetInterfaceDX11(&context_desc.backendInterfaceUpscaling, ffxGetDeviceDX11(device.Get()), scratch_buffer, scratch_buffer_size, 1);
+      FfxErrorCode err_code = ffxGetInterfaceDX11(&context_desc.backendInterfaceUpscaling, ffxGetDeviceDX11(device.Get()), scratch_buffer, scratch_buffer_size, max_context_count);
       if (err_code != FFX_OK)
       {
-         printf_s("FSR3: ffxGetInterfaceDX11 failed, error = %d\n", static_cast<int>(err_code));
+         const std::string message = "[Luma] FSR3: ffxGetInterfaceDX11 failed (error " + std::to_string(static_cast<int>(err_code)) + "); FSR3 is disabled for this session.";
+         LogFsrOnce(reshade::log::level::error, "ffxGetInterfaceDX11", message);
+         printf_s("%s\n", message.c_str());
          ASSERT_ONCE(false);
          free(scratch_buffer);
          return false;
@@ -240,20 +261,25 @@ namespace FidelityFX
          err_code = ffxFsr3ContextDestroy(&custom_data->context);
          if (err_code != FFX_OK)
          {
-            printf_s("FSR3: ffxFsr3ContextDestroy failed, error = %d\n", static_cast<int>(err_code));
+            const std::string message = "[Luma] FSR3: ffxFsr3ContextDestroy failed (error " + std::to_string(static_cast<int>(err_code)) + ").";
+            LogFsrOnce(reshade::log::level::warning, "ffxFsr3ContextDestroy", message);
+            printf_s("%s\n", message.c_str());
          }
          //custom_data->context = {}; // Probably not very useful
          memset(&custom_data->context, 0, sizeof(FfxFsr3Context));
          custom_data->has_context = false;
 
          free(custom_data->scratch_buffer);
+         custom_data->scratch_buffer = nullptr;
       }
 
       err_code = ffxFsr3ContextCreate(&custom_data->context, &context_desc);
       if (err_code != FFX_OK)
       {
          // TODO: set FSR as non compatible if this failed with a "non compatible" or "dll missing" error? Or try again?
-         printf_s("FSR3: ffxFsr3ContextCreate failed, error = %d\n", static_cast<int>(err_code));
+         const std::string message = "[Luma] FSR3: ffxFsr3ContextCreate failed (error " + std::to_string(static_cast<int>(err_code)) + "); FSR3 is disabled for this session. On Proton/Linux, install the VC++ 2015-2022 and msvcrt40 runtimes in the active prefix, then restart.";
+         LogFsrOnce(reshade::log::level::error, "ffxFsr3ContextCreate", message);
+         printf_s("%s\n", message.c_str());
          ASSERT_ONCE_MSG(false, "Couldn't create FSR3 context");
          free(scratch_buffer);
          return false;
@@ -277,6 +303,17 @@ namespace FidelityFX
    bool FidelityFX::FSR::Draw(const SR::InstanceData* data, ID3D11DeviceContext* command_list, const DrawData& draw_data)
    {
       auto& custom_data = reinterpret_cast<const FSRInstanceData*&>(data);
+
+      // Never dispatch with a zeroed/failed context. That can leave the output
+      // texture untouched, which shows up as a frozen 3D image.
+      if (!custom_data || !custom_data->has_context || !command_list ||
+          !draw_data.source_color || !draw_data.output_color ||
+          !draw_data.depth_buffer || !draw_data.motion_vectors)
+      {
+         LogFsrOnce(reshade::log::level::warning, "DrawInvalidState",
+            "[Luma] FSR3: skipped upscale because the FSR3 context or an input resource was not ready.");
+         return false;
+      }
 
       FfxFsr3DispatchUpscaleDescription dispatch_upscale{};
 
@@ -343,7 +380,9 @@ namespace FidelityFX
       const FfxErrorCode constant_err_code = ffxFsr3SetUpscalerConstant(const_cast<FfxFsr3Context*>(&custom_data->context), FFX_FSR3UPSCALER_CONFIGURE_UPSCALE_KEY_FVELOCITYFACTOR, &velocity_factor);
       if (constant_err_code != FFX_OK)
       {
-         printf_s("FSR3: ffxFsr3SetUpscalerConstant failed, error = %d\n", static_cast<int>(constant_err_code));
+         const std::string message = "[Luma] FSR3: ffxFsr3SetUpscalerConstant failed (error " + std::to_string(static_cast<int>(constant_err_code)) + ").";
+         LogFsrOnce(reshade::log::level::warning, "ffxFsr3SetUpscalerConstant", message);
+         printf_s("%s\n", message.c_str());
       }
 
       dispatch_upscale.flags = 0;
@@ -357,9 +396,12 @@ namespace FidelityFX
       FfxErrorCode err_code = ffxFsr3ContextDispatchUpscale(const_cast<FfxFsr3Context*>(&custom_data->context), &dispatch_upscale);
       if (err_code != FFX_OK)
       {
-         printf_s("FSR3: ffxFsr3ContextDispatchUpscale failed, error = %d\n", static_cast<int>(err_code));
+         const std::string message = "[Luma] FSR3: ffxFsr3ContextDispatchUpscale failed (error " + std::to_string(static_cast<int>(err_code)) + "); falling back to the unscaled scene image.";
+         LogFsrOnce(reshade::log::level::error, "ffxFsr3ContextDispatchUpscale", message);
+         printf_s("%s\n", message.c_str());
+         return false;
       }
-      return err_code == FFX_OK;
+      return true;
    }
 }
 
