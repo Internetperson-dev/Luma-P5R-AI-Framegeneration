@@ -318,21 +318,24 @@ namespace FidelityFX
       FfxFsr3DispatchUpscaleDescription dispatch_upscale{};
 
       dispatch_upscale.commandList = ffxGetCommandListDX11(command_list);
-      dispatch_upscale.color = ffxGetResourceDX11_local(draw_data.source_color, GetFfxResourceDescriptionDX11(draw_data.source_color), L"FSR3_color");
-      dispatch_upscale.upscaleOutput = ffxGetResourceDX11_local(draw_data.output_color, GetFfxResourceDescriptionDX11(draw_data.output_color), L"FSR3_upscaleOutput");
-      dispatch_upscale.depth = ffxGetResourceDX11_local(draw_data.depth_buffer, GetFfxResourceDescriptionDX11(draw_data.depth_buffer), L"FSR3_depth");
-      dispatch_upscale.motionVectors = ffxGetResourceDX11_local(draw_data.motion_vectors, GetFfxResourceDescriptionDX11(draw_data.motion_vectors), L"FSR3_motionVectors");
+      // DX11 FFX samples describe read-only inputs as pixel+compute readable and the
+      // upscale target as a UAV. The old compute-read default left the output state
+      // ambiguous and could produce an unchanged/frozen output texture.
+      dispatch_upscale.color = ffxGetResourceDX11_local(draw_data.source_color, GetFfxResourceDescriptionDX11(draw_data.source_color), L"FSR3_color", FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
+      dispatch_upscale.upscaleOutput = ffxGetResourceDX11_local(draw_data.output_color, GetFfxResourceDescriptionDX11(draw_data.output_color), L"FSR3_upscaleOutput", FFX_RESOURCE_STATE_UNORDERED_ACCESS);
+      dispatch_upscale.depth = ffxGetResourceDX11_local(draw_data.depth_buffer, GetFfxResourceDescriptionDX11(draw_data.depth_buffer), L"FSR3_depth", FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
+      dispatch_upscale.motionVectors = ffxGetResourceDX11_local(draw_data.motion_vectors, GetFfxResourceDescriptionDX11(draw_data.motion_vectors), L"FSR3_motionVectors", FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
       if (draw_data.exposure)
       {
-         dispatch_upscale.exposure = ffxGetResourceDX11_local(draw_data.exposure, GetFfxResourceDescriptionDX11(draw_data.exposure), L"FSR3_exposure");
+         dispatch_upscale.exposure = ffxGetResourceDX11_local(draw_data.exposure, GetFfxResourceDescriptionDX11(draw_data.exposure), L"FSR3_exposure", FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
       }
       if (draw_data.bias_mask)
       {
-         dispatch_upscale.reactive = ffxGetResourceDX11_local(draw_data.bias_mask, GetFfxResourceDescriptionDX11(draw_data.bias_mask), L"FSR3_reactive");
+         dispatch_upscale.reactive = ffxGetResourceDX11_local(draw_data.bias_mask, GetFfxResourceDescriptionDX11(draw_data.bias_mask), L"FSR3_reactive", FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
       }
       if (draw_data.transparency_alpha)
       {
-         dispatch_upscale.transparencyAndComposition = ffxGetResourceDX11_local(draw_data.transparency_alpha, GetFfxResourceDescriptionDX11(draw_data.transparency_alpha), L"FSR3_transparencyAndComposition");
+         dispatch_upscale.transparencyAndComposition = ffxGetResourceDX11_local(draw_data.transparency_alpha, GetFfxResourceDescriptionDX11(draw_data.transparency_alpha), L"FSR3_transparencyAndComposition", FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
       }
 
 #if DEVELOPMENT
