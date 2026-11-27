@@ -30,6 +30,37 @@ namespace Display
 	namespace
 	{
 		thread_local int real_display_query_depth = 0;
+
+		static bool IsRunningOnWine()
+		{
+			static const bool isWine = []
+			{
+				const HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+				return ntdll != nullptr &&
+					(GetProcAddress(ntdll, "wine_get_version") != nullptr ||
+					 GetProcAddress(ntdll, "wine_server_call") != nullptr); // Some builds hide "wine_get_version".
+			}();
+			return isWine;
+		}
+
+		// HDR10+ NVAPI display queries and advanced display-color info 2 queries are
+		// broken/unimplemented under Wine/Proton, so skip them and log once.
+		static bool ShouldSkipBrokenWineHDRQueries()
+		{
+			if (!IsRunningOnWine())
+			{
+				return false;
+			}
+
+			static const bool warned = []
+			{
+				reshade::log::message(reshade::log::level::warning,
+					"[Luma] Wine/Proton detected: HDR10+ NVAPI display queries and advanced display-color info 2 queries are skipped because they are broken/unimplemented; using legacy display-state detection where available.");
+				return true;
+			}();
+			(void)warned;
+			return true;
+		}
 	}
 
 	ScopedRealDisplayQuery::ScopedRealDisplayQuery()
@@ -266,6 +297,11 @@ namespace Display
 		// Returns <= 0 if HDR10+ is not supported by the display.
 		float GetHDR10PlusDisplayPeakBrightness(HWND hWnd, HMONITOR hMonitor = 0)
 		{
+			if (ShouldSkipBrokenWineHDRQueries())
+			{
+				return 0.f;
+			}
+
 			// HDR10+ GAMING index to nits mapping, from Samsung docs
 			static constexpr std::array<float, 16> nitValues = {
 				100.f,  // 0
@@ -302,6 +338,11 @@ namespace Display
 		{
 			if (!hasInit)
 				return false;
+
+			if (ShouldSkipBrokenWineHDRQueries())
+			{
+				return false;
+			}
 
 			NvU32 displayId = GetNvapiDisplayIdFromHwnd(hWnd); // Note: we could force fallback on the primary display here, which would be more likely to be right than not (but not guaranteed)
 			if (displayId == 0)
@@ -502,6 +543,11 @@ namespace Display
 	#if defined(NTDDI_WIN11_GE) && NTDDI_VERSION >= NTDDI_WIN11_GA
 	bool GetColorInfo2(HWND hwnd, DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2& outColorInfo2, HMONITOR fallbackMonitor = 0)
 	{
+		if (ShouldSkipBrokenWineHDRQueries())
+		{
+			return false;
+		}
+
 		DISPLAYCONFIG_PATH_INFO pathInfo{};
 		if (GetDisplayConfigPathInfo(hwnd, fallbackMonitor, pathInfo))
 		{
@@ -560,9 +606,8 @@ namespace Display
 		// Note: from Windows 11 22H2 (build 22621), "Advanced Color" can also be enabled in SDR, so this returns false positives there (until 24H2, where the check above succeeds).
 		// Wine/Proton only implement this legacy query (from "DXVK_HDR" or the compositor HDR state), so we always use it there.
 		// The swapchain fallback below can't work on DXVK, as its output only reports HDR after a swapchain set an HDR color space.
-		static const bool isWine = GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "wine_get_version") != nullptr;
 		DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO colorInfo{};
-		if ((ENABLE_LEGACY_ADVANCED_COLOR || isWine) && GetColorInfo(hwnd, colorInfo, fallbackMonitor))
+		if ((ENABLE_LEGACY_ADVANCED_COLOR || ShouldSkipBrokenWineHDRQueries()) && GetColorInfo(hwnd, colorInfo, fallbackMonitor))
 		{
 			enabled = colorInfo.advancedColorEnabled;
 			assert(!enabled || (colorInfo.advancedColorSupported && !colorInfo.advancedColorForceDisabled));
@@ -794,7 +839,7 @@ namespace Display
 		// The HDR10+ peak brightness is limited to one of 16 values, however the HDR10+ GAMING mode might assume a signal with a peak matching it, so using it might be safer.
 		// If the user has an HDR color profile (e.g. from the Windows HDR Calibration app), we follow that instead, as they might prefer a dimmer presentation.
 		// Note: we check "NVAPI::hasInit" instead of calling "NVAPI::Init()" again, to avoid spamming init failures on non Nvidia GPUs.
-		if (NVAPI::hasInit && !HasUserHDRColorProfile(0, outputDesc1.Monitor))
+		if (!ShouldSkipBrokenWineHDRQueries() && NVAPI::hasInit && !HasUserHDRColorProfile(0, outputDesc1.Monitor))
 		{
 			const float hdr10PlusPeakBrightness = NVAPI::GetHDR10PlusDisplayPeakBrightness(0, outputDesc1.Monitor);
 			if (hdr10PlusPeakBrightness > 0.f)

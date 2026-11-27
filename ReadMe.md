@@ -93,3 +93,17 @@ LowLatencyInput=1
 LowLatencyOutput=1
 ForceReflex=0
 ```
+
+## Known Linux/Proton limitation: HDR
+
+HDR handling is currently broken under Wine/Proton and is skipped for now. Wine does not implement
+`DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO_2` (packet type 15), which Luma uses to query
+modern display color state, and Luma's HDR10+ peak-brightness / output-mode calls through NVAPI can
+crash with dxvk-nvapi.
+
+Luma now detects Wine/Proton at runtime, logs a one-time warning, and skips those HDR/NVAPI display
+queries. It falls back to the legacy display-state query where available. This does **not** disable
+NVAPI globally, so DLSS remains available; `PROTON_DISABLE_NVAPI=1` is no longer required for this
+specific crash. SDR gameplay, upscaling and frame generation are unaffected. Native HDR toggling and
+HDR10+ peak-brightness detection remain unsupported on Linux until Wine/Proton implement the
+required display APIs.
